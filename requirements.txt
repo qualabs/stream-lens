@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+google-genai
+httpx
+faster-whisper
+librosa
+soundfile
+numpy
+requests
