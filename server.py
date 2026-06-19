@@ -899,6 +899,23 @@ async def post_processing(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True, "processing_enabled": processing_enabled})
 
 
+@app.get("/config")
+async def get_config() -> JSONResponse:
+    return JSONResponse({"config": {
+        "BUFFER_SIZE": BUFFER_SIZE,
+        "ANALYSIS_TRIGGER_SEGMENTS": ANALYSIS_TRIGGER_SEGMENTS,
+        "ANALYSIS_VIDEO_RENDITION": ANALYSIS_VIDEO_RENDITION,
+        "FRAME_SAMPLE_MODE": FRAME_SAMPLE_MODE,
+        "FRAME_SAMPLE_FPS": FRAME_SAMPLE_FPS,
+        "MAX_FRAMES": MAX_FRAMES,
+        "FRAME_MAX_WIDTH": FRAME_MAX_WIDTH,
+        "SEG_DURATION_S": SEG_DURATION_S,
+        "FUSION_MODEL": FUSION_MODEL,
+        "VIDEO_MODEL": VIDEO_MODEL,
+        "FUSION_CONTEXT_PREFIX": FUSION_CONTEXT_PREFIX,
+    }})
+
+
 @app.post("/config")
 async def post_config(request: Request) -> JSONResponse:
     """Update analysis config at runtime and reset buffers. Used by the benchmark."""
