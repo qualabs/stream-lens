@@ -30,6 +30,7 @@ import re
 import subprocess
 import tempfile
 import time
+import xml.etree.ElementTree as ET
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -74,6 +75,16 @@ SERVER_PORT: int = int(os.environ.get("SERVER_PORT", "8001"))
 MORPHEUS_BASE_URL: str = os.environ.get("MORPHEUS_BASE_URL", "http://morpheus")
 MORPHEUS_MPD_URL: str = f"{MORPHEUS_BASE_URL}/live.mpd"
 
+_DASH_NS        = "urn:mpeg:dash:schema:mpd:2011"
+_UP_NS          = "urn:mpeg:dash:schema:urlparam:2016"
+_UP_SCHEME      = "urn:mpeg:dash:urlparam:2016"
+_OVERLAY_SCHEME = "urn:scte:dash:scte214-events"
+
+ET.register_namespace("",       _DASH_NS)
+ET.register_namespace("up",     _UP_NS)
+ET.register_namespace("scte35", "http://www.scte.org/schemas/35/2016")
+ET.register_namespace("xsi",    "http://www.w3.org/2001/XMLSchema-instance")
+
 BUFFER_SIZE: int = int(os.environ.get("BUFFER_SIZE", "7"))
 ANALYSIS_TRIGGER_SEGMENTS: int = int(
     os.environ.get("ANALYSIS_TRIGGER_SEGMENTS", str(BUFFER_SIZE))
@@ -117,6 +128,8 @@ _trigger_counter: int = 0
 _total_video_segs_received: int = 0
 _seen_video_stream_ids: set[int] = set()
 _invalid_rendition: bool = False
+_last_injected_mpd: Optional[bytes] = None
+_last_ready_context: Optional[str] = None
 
 
 # ── App lifespan ──────────────────────────────────────────────────────────────
@@ -694,6 +707,9 @@ async def _run_analysis(
                         "has_speech": audio_ctx.get("has_speech"),
                         **({"errors": all_errors} if all_errors else {}),
                     }
+                    global _last_ready_context
+                    if not fusion_failed:
+                        _last_ready_context = context_str
 
         except Exception as exc:
             logger.error("[analysis] prepare failed: %s", exc, exc_info=True)
@@ -713,7 +729,52 @@ async def _run_analysis(
             analysis_in_progress = False
 
 
+def _inject_context_into_mpd(mpd_bytes: bytes) -> bytes:
+    global _last_injected_mpd
+    ctx = _last_ready_context
+    if not ctx:
+        _last_injected_mpd = mpd_bytes
+        return mpd_bytes
+
+    try:
+        root = ET.fromstring(mpd_bytes)
+    except ET.ParseError:
+        logger.warning("[mpd-inject] XML parse failed, forwarding as-is")
+        _last_injected_mpd = mpd_bytes
+        return mpd_bytes
+
+    scte_stream = None
+    for period in root.findall(f"{{{_DASH_NS}}}Period"):
+        for es in period.findall(f"{{{_DASH_NS}}}EventStream"):
+            if "scte35" in (es.get("schemeIdUri") or ""):
+                scte_stream = es
+                break
+        if scte_stream is not None:
+            break
+
+    if scte_stream is None:
+        _last_injected_mpd = mpd_bytes
+        return mpd_bytes
+
+    for sp in scte_stream.findall(f"{{{_DASH_NS}}}SupplementalProperty"):
+        if sp.get("schemeIdUri") == _UP_SCHEME:
+            scte_stream.remove(sp)
+
+    sp = ET.Element(f"{{{_DASH_NS}}}SupplementalProperty")
+    sp.set("schemeIdUri", _UP_SCHEME)
+    eqi = ET.SubElement(sp, f"{{{_UP_NS}}}ExtUrlQueryInfo")
+    eqi.set("queryTemplate", "$querypart$")
+    eqi.set("includeInRequests", _OVERLAY_SCHEME)
+    eqi.set("queryString", ctx)  # ET XML-encodes & → &amp; automatically
+    scte_stream.insert(0, sp)
+
+    result = ET.tostring(root, encoding="unicode", xml_declaration=True).encode()
+    _last_injected_mpd = result
+    return result
+
+
 async def _forward_mpd_to_morpheus(mpd_bytes: bytes) -> None:
+    mpd_bytes = _inject_context_into_mpd(mpd_bytes)
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.put(
@@ -970,6 +1031,15 @@ async def post_config(request: Request) -> JSONResponse:
         "FRAME_SAMPLE_FPS": FRAME_SAMPLE_FPS,
         "MAX_FRAMES": MAX_FRAMES,
     }})
+
+
+@app.get("/mpd")
+async def get_mpd():
+    """Return the last MPD forwarded to Morpheus (after context injection)."""
+    from fastapi.responses import Response
+    if _last_injected_mpd is None:
+        return JSONResponse({"error": "no MPD received yet"}, status_code=404)
+    return Response(content=_last_injected_mpd, media_type="application/dash+xml")
 
 
 @app.get("/context")

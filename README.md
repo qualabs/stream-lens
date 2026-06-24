@@ -91,10 +91,10 @@ Accepts any subset of the configurable variables at runtime. Resets buffers and 
 | `BUFFER_SIZE` | `7` | Number of segments to feed into each analysis run |
 | `ANALYSIS_TRIGGER_SEGMENTS` | `BUFFER_SIZE` | Segments from the selected rendition to receive before triggering |
 | `SEG_DURATION_S` | `2` | Expected segment duration (must match live-sim `seg_duration`) |
-| `ANALYSIS_VIDEO_RENDITION` | `0` | Stream index of the rendition to buffer (matches `LIVE_SIM_RENDITIONS` order) |
-| `FRAME_SAMPLE_MODE` | `fps` | `fps` = fixed rate; `iframes` = keyframes only |
+| `ANALYSIS_VIDEO_RENDITION` | `2` | Stream index of the rendition to buffer (matches `LIVE_SIM_RENDITIONS` order) |
+| `FRAME_SAMPLE_MODE` | `iframes` | `fps` = fixed rate; `iframes` = keyframes only |
 | `FRAME_SAMPLE_FPS` | `1.0` | Frames per second (fps mode) |
-| `MAX_FRAMES` | `10` | Maximum frames sent to the video model per analysis |
+| `MAX_FRAMES` | `15` | Maximum frames sent to the video model per analysis |
 | `FRAME_MAX_WIDTH` | `640` | Max frame width in pixels (downscaled before sending) |
 | `WHISPER_MODEL` | `medium` | faster-whisper model name |
 | `WHISPER_DEVICE` | `cpu` | `cpu` or `cuda` |
