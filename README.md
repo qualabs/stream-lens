@@ -101,10 +101,28 @@ Accepts any subset of the configurable variables at runtime. Resets buffers and 
 | `MORPHEUS_BASE_URL` | `http://morpheus` | Base URL for morpheus segment + MPD forwarding |
 | `SERVER_PORT` | `8001` | Port the server listens on |
 
+## Model setup
+
+Two models are required:
+
+**Whisper** — pre-downloaded at image build time. No manual step needed; `docker build` (or `docker compose up --build`) handles it automatically.
+
+**Ollama fusion model** — must be pulled before (or after) the stack starts. Two options:
+
+- **Script** (recommended): run `./pull-models.sh` from within `stream-lens/` or from the sgai-demo repo root. It reads `FUSION_MODEL` and `OLLAMA_MODELS_DIR` from your `.env` automatically, then starts a temporary Ollama container to pull the model:
+
+  ```bash
+  ./stream-lens/pull-models.sh
+  ```
+
+- **Manual** (after stack is running): `docker compose exec ollama ollama pull <model>`
+
+If `FUSION_MODEL` contains no `:` (e.g. `gemma-4-26b-a4b-it`), the Google API path is used and no Ollama pull is needed.
+
 ## Running
 
 ```bash
-# From repo root via Docker Compose
+# From sgai-demo root via Docker Compose
 docker compose up stream-lens
 
 # Standalone
@@ -112,13 +130,12 @@ docker run -p 8001:8001 \
   -e GOOGLE_API_KEY=... \
   -e LIVE_SIM_RENDITIONS="1920x1080:4000k,1280x720:2000k,854x480:1000k" \
   -e ANALYSIS_VIDEO_RENDITION=2 \
-  -v /usr/share/ollama/.ollama:/root/.ollama \
+  -v "$HOME/.ollama:/root/.ollama" \
   stream-lens
 ```
 
 ## Docker notes
 
-- Ollama is embedded in the container and starts automatically via `entrypoint.sh`
-- `gemma4:e4b` is pulled on first run if not found in the mounted model directory
 - The Whisper `medium` model (~1.5 GB) is pre-downloaded at image build time
-- Mount `/usr/share/ollama/.ollama:/root/.ollama` to reuse host-downloaded Ollama models (~9.6 GB for E4B)
+- Ollama runs as a separate service (`ollama` container) in the sgai-demo stack
+- Mount a local `~/.ollama` path to reuse host-downloaded Ollama models and avoid re-pulling (~9.6 GB for E4B)
