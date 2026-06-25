@@ -130,6 +130,7 @@ _seen_video_stream_ids: set[int] = set()
 _invalid_rendition: bool = False
 _last_injected_mpd: Optional[bytes] = None
 _last_ready_context: Optional[str] = None
+_config_generation: int = 0  # incremented on every POST /config; guards stale analysis write-back
 
 
 # ── App lifespan ──────────────────────────────────────────────────────────────
@@ -596,6 +597,7 @@ async def _run_analysis(
     audio_segs: list[tuple[int, bytes]],
     clip_start: datetime,
     clip_end: datetime,
+    generation: int = 0,
 ) -> None:
     global analysis_in_progress, latest_context
 
@@ -696,6 +698,9 @@ async def _run_analysis(
                 )
 
                 async with _lock:
+                    if _config_generation != generation:
+                        logger.info("[analysis] discarding stale result (generation mismatch)")
+                        return
                     latest_context = {
                         "status": status,
                         "context": fusion_error if fusion_failed else context_str,
@@ -714,6 +719,8 @@ async def _run_analysis(
         except Exception as exc:
             logger.error("[analysis] prepare failed: %s", exc, exc_info=True)
             async with _lock:
+                if _config_generation != generation:
+                    return
                 latest_context = {
                     "status": "error",
                     "context": str(exc),
@@ -924,6 +931,7 @@ async def put_segment(request: Request) -> JSONResponse:
                     v_init_snap, a_init_snap,
                     video_segs, audio_segs,
                     clip_start, clip_end,
+                    generation=_config_generation,
                 )
             )
             logger.info(
@@ -983,7 +991,7 @@ async def post_config(request: Request) -> JSONResponse:
     global BUFFER_SIZE, ANALYSIS_TRIGGER_SEGMENTS, MAX_BUFFER, _trigger_counter, _total_video_segs_received
     global ANALYSIS_VIDEO_RENDITION, _seen_video_stream_ids, _invalid_rendition
     global FRAME_SAMPLE_MODE, FRAME_SAMPLE_FPS, MAX_FRAMES
-    global _last_ready_context
+    global _last_ready_context, _config_generation
 
     body = await request.json()
     async with _lock:
@@ -1011,6 +1019,7 @@ async def post_config(request: Request) -> JSONResponse:
         _trigger_counter = 0
         _total_video_segs_received = 0
         _last_ready_context = None
+        _config_generation += 1
         latest_context.update({
             "status": "waiting",
             "context": None,
