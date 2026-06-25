@@ -983,6 +983,7 @@ async def post_config(request: Request) -> JSONResponse:
     global BUFFER_SIZE, ANALYSIS_TRIGGER_SEGMENTS, MAX_BUFFER, _trigger_counter, _total_video_segs_received
     global ANALYSIS_VIDEO_RENDITION, _seen_video_stream_ids, _invalid_rendition
     global FRAME_SAMPLE_MODE, FRAME_SAMPLE_FPS, MAX_FRAMES
+    global _last_ready_context
 
     body = await request.json()
     async with _lock:
@@ -1009,6 +1010,7 @@ async def post_config(request: Request) -> JSONResponse:
         audio_buffer.clear()
         _trigger_counter = 0
         _total_video_segs_received = 0
+        _last_ready_context = None
         latest_context.update({
             "status": "waiting",
             "context": None,
