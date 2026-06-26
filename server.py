@@ -812,8 +812,8 @@ async def _forward_segment_to_morpheus(seg_name: str, data: bytes) -> None:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@app.put("/segment")
-async def put_segment(request: Request) -> JSONResponse:
+@app.put("/{seg_name}")
+async def put_segment(seg_name: str, request: Request) -> JSONResponse:
     """Receive a raw DASH segment (init or media) and buffer it."""
     global video_init, audio_init, analysis_in_progress, latest_context
     global _trigger_counter, _total_video_segs_received, _seen_video_stream_ids, _invalid_rendition
@@ -841,9 +841,7 @@ async def put_segment(request: Request) -> JSONResponse:
     data = await request.body()
 
     # Forward segment to Morpheus regardless of processing_enabled state
-    seg_name = request.headers.get("X-Segment-Name", "")
-    if seg_name:
-        asyncio.create_task(_forward_segment_to_morpheus(seg_name, data))
+    asyncio.create_task(_forward_segment_to_morpheus(seg_name, data))
 
     async with _lock:
         if seg_type == "init":
