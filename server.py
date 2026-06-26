@@ -812,6 +812,16 @@ async def _forward_segment_to_morpheus(seg_name: str, data: bytes) -> None:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+@app.put("/live.mpd")
+async def put_live_mpd(request: Request) -> JSONResponse:
+    """Receive MPD from live-sim and forward to Morpheus (fire-and-forget)."""
+    mpd_bytes = await request.body()
+    if not mpd_bytes:
+        return JSONResponse({"ok": False, "msg": "empty body"}, status_code=400)
+    asyncio.create_task(_forward_mpd_to_morpheus(mpd_bytes))
+    return JSONResponse({"ok": True})
+
+
 @app.put("/{seg_name}")
 async def put_segment(seg_name: str, request: Request) -> JSONResponse:
     """Receive a raw DASH segment (init or media) and buffer it."""
@@ -937,16 +947,6 @@ async def put_segment(seg_name: str, request: Request) -> JSONResponse:
                 len(video_segs), len(audio_segs),
             )
 
-    return JSONResponse({"ok": True})
-
-
-@app.put("/live.mpd")
-async def put_live_mpd(request: Request) -> JSONResponse:
-    """Receive MPD from live-sim and forward to Morpheus (fire-and-forget)."""
-    mpd_bytes = await request.body()
-    if not mpd_bytes:
-        return JSONResponse({"ok": False, "msg": "empty body"}, status_code=400)
-    asyncio.create_task(_forward_mpd_to_morpheus(mpd_bytes))
     return JSONResponse({"ok": True})
 
 
